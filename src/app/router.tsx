@@ -1,9 +1,13 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { GuestOnly } from '../components/GuestOnly'
+import { RequireAdmin } from '../components/RequireAdmin'
 import { AdminLayout } from '../components/layout/AdminLayout'
+import { LoginPage } from '../pages/LoginPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { OrdersPage } from '../pages/OrdersPage'
 import { ProductsPage } from '../pages/ProductsPage'
 import { DesignsPage } from '../pages/DesignsPage'
+import { CustomerDetailPage } from '../pages/CustomerDetailPage'
 import { CustomersPage } from '../pages/CustomersPage'
 import { InventoryPage } from '../pages/InventoryPage'
 import { CouponsPage } from '../pages/CouponsPage'
@@ -14,8 +18,20 @@ import { NotFoundPage } from '../pages/NotFoundPage'
 
 export const router = createBrowserRouter([
   {
+    path: '/login',
+    element: (
+      <GuestOnly>
+        <LoginPage />
+      </GuestOnly>
+    ),
+  },
+  {
     path: '/',
-    element: <AdminLayout />,
+    element: (
+      <RequireAdmin>
+        <AdminLayout />
+      </RequireAdmin>
+    ),
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: 'dashboard', element: <DashboardPage /> },
@@ -23,6 +39,7 @@ export const router = createBrowserRouter([
       { path: 'products', element: <ProductsPage /> },
       { path: 'designs', element: <DesignsPage /> },
       { path: 'customers', element: <CustomersPage /> },
+      { path: 'customers/:userId', element: <CustomerDetailPage /> },
       { path: 'inventory', element: <InventoryPage /> },
       { path: 'coupons', element: <CouponsPage /> },
       { path: 'analytics', element: <AnalyticsPage /> },

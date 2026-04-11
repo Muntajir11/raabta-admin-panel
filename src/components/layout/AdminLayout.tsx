@@ -1,5 +1,4 @@
 import { Outlet, ScrollRestoration } from 'react-router-dom'
-import { Toaster } from 'react-hot-toast'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 
@@ -16,16 +15,6 @@ export function AdminLayout() {
         </div>
       </div>
       <ScrollRestoration />
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 2500,
-          style: {
-            background: '#0f172a',
-            color: '#fff',
-          },
-        }}
-      />
     </div>
   )
 }
