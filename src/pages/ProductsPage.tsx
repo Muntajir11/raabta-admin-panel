@@ -4,10 +4,16 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
 import { PageHeader } from '../components/ui/PageHeader'
+import { cn } from '../components/ui/cn'
 import { formatCurrencyRs } from '../lib/format'
 import { notify } from '../lib/notify'
 import { apiRequest, getApiBaseUrl, resolveMediaUrl } from '../lib/api'
-import { PRODUCT_SECTIONS, type ProductSection } from '../constants/productSections'
+import {
+  PRODUCT_SECTIONS,
+  type ProductSection,
+  normalizeCategoryForForm,
+  displayCategoryLabel,
+} from '../constants/productSections'
 
 export type AdminProductRow = {
   productId: string
@@ -30,6 +36,48 @@ export type AdminProductRow = {
 const defaultSizes = 'XS,S,M,L,XL,XXL,XXXL'
 const defaultColors = 'Black,White'
 
+const GSM_VALUES = [180, 210, 240] as const
+type GsmChoice = (typeof GSM_VALUES)[number]
+
+type GsmTierFormRow = { gsm: GsmChoice; price: string; isActive: boolean }
+
+function defaultGsmRow(gsm: GsmChoice = 180): GsmTierFormRow {
+  return { gsm, price: '', isActive: true }
+}
+
+function gsmOptionsToRows(opts: AdminProductRow['gsmOptions']): GsmTierFormRow[] {
+  if (!opts?.length) return []
+  return opts.map((o) => {
+    const gsm = o.gsm === 210 || o.gsm === 240 ? o.gsm : 180
+    return {
+      gsm,
+      price: String(o.price ?? ''),
+      isActive: o.isActive !== false,
+    }
+  })
+}
+
+function rowsToGsmPayload(rows: GsmTierFormRow[]): AdminProductRow['gsmOptions'] | undefined {
+  if (!rows.length) return undefined
+  return rows.map((r) => ({
+    gsm: r.gsm,
+    price: Number(r.price),
+    isActive: r.isActive,
+  }))
+}
+
+function validateGsmRows(rows: GsmTierFormRow[]): string | null {
+  if (!rows.length) return null
+  for (const r of rows) {
+    if (r.price.trim() === '') return 'Enter a price for each GSM tier, or remove empty rows'
+    const p = Number(r.price)
+    if (!Number.isFinite(p) || p < 0) return 'Enter a valid price (≥ 0) for each tier'
+  }
+  const gsms = rows.map((r) => r.gsm)
+  if (new Set(gsms).size !== gsms.length) return 'Each GSM tier (180 / 210 / 240) must be unique'
+  return null
+}
+
 type ProductFormState = {
   productId: string
   name: string
@@ -41,7 +89,7 @@ type ProductFormState = {
   basePrice: string | number | ''
   sizes: string
   colors: string
-  gsmOptionsJson: string
+  gsmRows: GsmTierFormRow[]
   imageUrl: string
   isActive: boolean
 }
@@ -58,10 +106,51 @@ function emptyForm(): ProductFormState {
     basePrice: '' as string | number | '',
     sizes: defaultSizes,
     colors: defaultColors,
-    gsmOptionsJson: '',
+    gsmRows: [],
     imageUrl: '',
     isActive: true,
   }
+}
+
+function StoreStatusControl({
+  isActive,
+  disabled,
+  onSet,
+}: {
+  isActive: boolean
+  disabled?: boolean
+  onSet: (next: boolean) => void
+}) {
+  return (
+    <div
+      className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-medium shadow-sm"
+      role="group"
+      aria-label="Store visibility"
+    >
+      <button
+        type="button"
+        disabled={disabled}
+        className={cn(
+          'rounded-md px-2.5 py-1 transition',
+          isActive ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+        )}
+        onClick={() => onSet(true)}
+      >
+        Live
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        className={cn(
+          'rounded-md px-2.5 py-1 transition',
+          !isActive ? 'bg-rose-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+        )}
+        onClick={() => onSet(false)}
+      >
+        Hidden
+      </button>
+    </div>
+  )
 }
 
 export function ProductsPage() {
@@ -74,6 +163,9 @@ export function ProductsPage() {
   const [form, setForm] = useState<ProductFormState>(emptyForm())
   const [file, setFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
+  const [activeSavingId, setActiveSavingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [productToDelete, setProductToDelete] = useState<AdminProductRow | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -112,14 +204,12 @@ export function ProductsPage() {
   async function openEdit(productId: string) {
     try {
       const row = await apiRequest<AdminProductRow>(`/api/admin/products/${encodeURIComponent(productId)}`)
-      const section = PRODUCT_SECTIONS.includes(row.category as ProductSection)
-        ? (row.category as ProductSection)
-        : PRODUCT_SECTIONS[0]
+      const category = normalizeCategoryForForm(row.category)
       setEditId(productId)
       setForm({
         productId: row.productId,
         name: row.name,
-        category: section,
+        category,
         description: row.description || '',
         brand: row.brand || 'Raabta',
         rating: row.rating ?? '',
@@ -127,7 +217,7 @@ export function ProductsPage() {
         basePrice: row.basePrice,
         sizes: (row.sizes || []).join(','),
         colors: (row.colors || []).join(','),
-        gsmOptionsJson: JSON.stringify(row.gsmOptions || [], null, 2),
+        gsmRows: gsmOptionsToRows(row.gsmOptions || []),
         imageUrl: row.image?.startsWith('http') ? row.image : resolveMediaUrl(row.image),
         isActive: row.isActive,
       })
@@ -147,6 +237,14 @@ export function ProductsPage() {
         notify.error('Invalid base price')
         return
       }
+      const gsmErr = validateGsmRows(form.gsmRows)
+      if (gsmErr) {
+        notify.error(gsmErr)
+        return
+      }
+      const gsmPayload = rowsToGsmPayload(form.gsmRows)
+      const gsmOptionsJson = gsmPayload ? JSON.stringify(gsmPayload) : ''
+
       if (editId) {
         const body: Record<string, unknown> = {
           name: form.name.trim(),
@@ -167,9 +265,7 @@ export function ProductsPage() {
           .split(/\r?\n/)
           .map((l) => l.trim())
           .filter(Boolean)
-        if (form.gsmOptionsJson.trim()) {
-          body.gsmOptions = JSON.parse(form.gsmOptionsJson) as AdminProductRow['gsmOptions']
-        }
+        if (gsmPayload) body.gsmOptions = gsmPayload
         if (file) {
           const fd = new FormData()
           fd.append('name', form.name.trim())
@@ -181,7 +277,7 @@ export function ProductsPage() {
           fd.append('features', form.featuresText)
           fd.append('sizes', form.sizes)
           fd.append('colors', form.colors)
-          if (form.gsmOptionsJson.trim()) fd.append('gsmOptionsJson', form.gsmOptionsJson)
+          if (gsmOptionsJson) fd.append('gsmOptionsJson', gsmOptionsJson)
           fd.append('isActive', form.isActive ? 'true' : 'false')
           fd.append('image', file)
           await apiRequest(`/api/admin/products/${encodeURIComponent(editId)}`, { method: 'PATCH', body: fd })
@@ -198,7 +294,6 @@ export function ProductsPage() {
           return
         }
         const fd = new FormData()
-        fd.append('productId', form.productId.trim())
         fd.append('name', form.name.trim())
         fd.append('category', form.category)
         fd.append('basePrice', String(basePrice))
@@ -208,7 +303,7 @@ export function ProductsPage() {
         fd.append('features', form.featuresText)
         fd.append('sizes', form.sizes)
         fd.append('colors', form.colors)
-        if (form.gsmOptionsJson.trim()) fd.append('gsmOptionsJson', form.gsmOptionsJson)
+        if (gsmOptionsJson) fd.append('gsmOptionsJson', gsmOptionsJson)
         fd.append('isActive', form.isActive ? 'true' : 'false')
         if (file) fd.append('image', file)
         if (form.imageUrl.trim()) fd.append('imageUrl', form.imageUrl.trim())
@@ -224,16 +319,61 @@ export function ProductsPage() {
     }
   }
 
-  async function toggleActive(productId: string) {
+  function openDeleteDialog(p: AdminProductRow) {
+    setProductToDelete(p)
+  }
+
+  async function confirmDeleteProduct() {
+    const p = productToDelete
+    if (!p) return
+    setDeletingId(p.productId)
     try {
-      await apiRequest<AdminProductRow>(`/api/admin/products/${encodeURIComponent(productId)}/toggle-active`, {
-        method: 'PATCH',
-      })
-      notify.info('Updated')
+      await apiRequest(`/api/admin/products/${encodeURIComponent(p.productId)}`, { method: 'DELETE' })
+      notify.info('Product deleted')
+      setProductToDelete(null)
       await load()
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Toggle failed')
+      notify.error(e instanceof Error ? e.message : 'Could not delete product')
+    } finally {
+      setDeletingId(null)
     }
+  }
+
+  async function setProductActive(productId: string, next: boolean, current: boolean) {
+    if (next === current) return
+    setActiveSavingId(productId)
+    try {
+      await apiRequest(`/api/admin/products/${encodeURIComponent(productId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: next }),
+      })
+      notify.info(next ? 'Product is live on the store' : 'Product hidden from the store')
+      await load()
+    } catch (e) {
+      notify.error(e instanceof Error ? e.message : 'Could not update visibility')
+    } finally {
+      setActiveSavingId(null)
+    }
+  }
+
+  function addGsmRow() {
+    setForm((f) => {
+      if (f.gsmRows.length >= 3) return f
+      const used = new Set(f.gsmRows.map((r) => r.gsm))
+      const nextGsm = GSM_VALUES.find((g) => !used.has(g)) ?? 180
+      return { ...f, gsmRows: [...f.gsmRows, defaultGsmRow(nextGsm)] }
+    })
+  }
+
+  function removeGsmRow(index: number) {
+    setForm((f) => ({ ...f, gsmRows: f.gsmRows.filter((_, i) => i !== index) }))
+  }
+
+  function updateGsmRow(index: number, patch: Partial<GsmTierFormRow>) {
+    setForm((f) => ({
+      ...f,
+      gsmRows: f.gsmRows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    }))
   }
 
   return (
@@ -288,7 +428,7 @@ export function ProductsPage() {
               <tr>
                 <th className="px-3 py-3">Product</th>
                 <th className="px-3 py-3">Section</th>
-                <th className="px-3 py-3">Active</th>
+                <th className="px-3 py-3">Store</th>
                 <th className="px-3 py-3">Sizes</th>
                 <th className="px-3 py-3">Colors</th>
                 <th className="px-3 py-3">GSM tiers</th>
@@ -322,15 +462,21 @@ export function ProductsPage() {
                         />
                         <div className="min-w-0">
                           <div className="font-medium text-slate-900">{p.name}</div>
-                          <div className="text-xs text-slate-500">{p.productId}</div>
+                          <div className="text-xs text-slate-500">
+                            Product Code - {p.productId}
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <Badge tone="slate">{p.category}</Badge>
+                      <Badge tone="slate">{displayCategoryLabel(p.category)}</Badge>
                     </td>
                     <td className="px-3 py-3">
-                      <Badge tone={p.isActive ? 'green' : 'rose'}>{p.isActive ? 'Active' : 'Inactive'}</Badge>
+                      <StoreStatusControl
+                        isActive={p.isActive}
+                        disabled={activeSavingId === p.productId}
+                        onSet={(next) => void setProductActive(p.productId, next, p.isActive)}
+                      />
                     </td>
                     <td className="px-3 py-3">
                       <div className="max-w-[220px] truncate text-slate-700">{p.sizes.join(', ')}</div>
@@ -339,9 +485,13 @@ export function ProductsPage() {
                       <div className="max-w-[220px] truncate text-slate-700">{p.colors.join(', ')}</div>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        {p.gsmOptions.map((g) => (
-                          <Badge key={g.gsm} tone={g.isActive === false ? 'rose' : 'brand'}>
+                      <div className="flex max-w-[220px] flex-wrap gap-2">
+                        {p.gsmOptions.map((g, idx) => (
+                          <Badge
+                            key={`${g.gsm}-${idx}`}
+                            tone={g.isActive === false ? 'rose' : 'brand'}
+                            className="whitespace-nowrap"
+                          >
                             {g.gsm}gsm · {formatCurrencyRs(g.price)}
                           </Badge>
                         ))}
@@ -349,12 +499,18 @@ export function ProductsPage() {
                     </td>
                     <td className="px-3 py-3 text-right font-medium">{formatCurrencyRs(p.basePrice)}</td>
                     <td className="px-3 py-3 text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex flex-wrap justify-end gap-1">
                         <Button type="button" variant="ghost" onClick={() => void openEdit(p.productId)}>
                           Edit
                         </Button>
-                        <Button type="button" variant="secondary" onClick={() => void toggleActive(p.productId)}>
-                          Toggle
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                          disabled={deletingId === p.productId}
+                          onClick={() => openDeleteDialog(p)}
+                        >
+                          {deletingId === p.productId ? 'Deleting…' : 'Delete'}
                         </Button>
                       </div>
                     </td>
@@ -371,18 +527,6 @@ export function ProductsPage() {
           <Card className="max-h-[90vh] w-full max-w-lg overflow-y-auto p-6">
             <h2 className="text-lg font-semibold text-slate-900">{editId ? 'Edit product' : 'Add product'}</h2>
             <form className="mt-4 space-y-3" onSubmit={(e) => void submitForm(e)}>
-              {!editId ? (
-                <label className="block text-xs font-medium text-slate-600">
-                  Product ID (SKU)
-                  <Input
-                    className="mt-1"
-                    value={form.productId}
-                    onChange={(e) => setForm((f) => ({ ...f, productId: e.target.value }))}
-                    required
-                    placeholder="e.g. RBT-042"
-                  />
-                </label>
-              ) : null}
               <label className="block text-xs font-medium text-slate-600">
                 Title
                 <Input
@@ -448,7 +592,12 @@ export function ProductsPage() {
                   step="0.01"
                   min={0}
                   value={form.basePrice}
-                  onChange={(e) => setForm((f) => ({ ...f, basePrice: e.target.value === '' ? '' : Number(e.target.value) }))}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      basePrice: e.target.value === '' ? '' : Number(e.target.value),
+                    }))
+                  }
                   required
                 />
               </label>
@@ -476,15 +625,77 @@ export function ProductsPage() {
                   onChange={(e) => setForm((f) => ({ ...f, colors: e.target.value }))}
                 />
               </label>
-              <label className="block text-xs font-medium text-slate-600">
-                GSM options (JSON array, optional — leave empty for defaults)
-                <textarea
-                  className="mt-1 min-h-[80px] w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs"
-                  value={form.gsmOptionsJson}
-                  onChange={(e) => setForm((f) => ({ ...f, gsmOptionsJson: e.target.value }))}
-                  placeholder='[{"gsm":180,"price":788},{"gsm":210,"price":791}]'
-                />
-              </label>
+              <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-slate-600">GSM price tiers (optional)</span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-8 text-xs"
+                    disabled={form.gsmRows.length >= 3}
+                    onClick={addGsmRow}
+                  >
+                    Add tier
+                  </Button>
+                </div>
+                {form.gsmRows.length === 0 ? (
+                  <p className="text-xs text-slate-500">No tiers — backend defaults apply. Add up to three (180 / 210 / 240 gsm).</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {form.gsmRows.map((row, index) => (
+                      <li
+                        key={`${row.gsm}-${index}`}
+                        className="flex flex-wrap items-end gap-2 rounded-md border border-slate-200 bg-white p-2"
+                      >
+                        <label className="text-xs text-slate-600">
+                          GSM
+                          <select
+                            className="mt-0.5 flex h-9 min-w-[88px] rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                            value={row.gsm}
+                            onChange={(e) =>
+                              updateGsmRow(index, { gsm: Number(e.target.value) as GsmChoice })
+                            }
+                          >
+                            {GSM_VALUES.map((g) => (
+                              <option key={g} value={g} disabled={form.gsmRows.some((r, i) => i !== index && r.gsm === g)}>
+                                {g}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="min-w-[100px] flex-1 text-xs text-slate-600">
+                          Price (Rs.)
+                          <Input
+                            className="mt-0.5"
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            value={row.price}
+                            onChange={(e) => updateGsmRow(index, { price: e.target.value })}
+                            placeholder="0"
+                          />
+                        </label>
+                        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={row.isActive}
+                            onChange={(e) => updateGsmRow(index, { isActive: e.target.checked })}
+                          />
+                          Active
+                        </label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-9 text-xs text-rose-600"
+                          onClick={() => removeGsmRow(index)}
+                        >
+                          Remove
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               {!editId ? (
                 <label className="block text-xs font-medium text-slate-600">
                   Image URL (if not uploading a file)
@@ -505,14 +716,13 @@ export function ProductsPage() {
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 />
               </label>
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={form.isActive}
-                  onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-slate-600">Visibility on storefront</span>
+                <StoreStatusControl
+                  isActive={form.isActive}
+                  onSet={(next) => setForm((f) => ({ ...f, isActive: next }))}
                 />
-                Active (visible on storefront)
-              </label>
+              </div>
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="ghost" onClick={() => setModalOpen(false)}>
                   Cancel
@@ -522,6 +732,47 @@ export function ProductsPage() {
                 </Button>
               </div>
             </form>
+          </Card>
+        </div>
+      ) : null}
+
+      {productToDelete ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          role="presentation"
+          onClick={() => {
+            if (!deletingId) setProductToDelete(null)
+          }}
+        >
+          <Card
+            className="w-full max-w-md p-6 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-slate-900">Delete product?</h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              <span className="font-medium text-slate-800">{productToDelete.name}</span>
+              {' · '}
+              Product Code - {productToDelete.productId}
+            </p>
+            <p className="mt-2 text-sm text-slate-500">This cannot be undone.</p>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={deletingId === productToDelete.productId}
+                onClick={() => setProductToDelete(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={deletingId === productToDelete.productId}
+                onClick={() => void confirmDeleteProduct()}
+              >
+                {deletingId === productToDelete.productId ? 'Deleting…' : 'Delete'}
+              </Button>
+            </div>
           </Card>
         </div>
       ) : null}

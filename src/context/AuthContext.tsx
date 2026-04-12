@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { getApiBaseUrl } from '../lib/api'
+import { getApiBaseUrl, tryRefreshSession } from '../lib/api'
 
 export type AuthUser = {
   id: string
@@ -30,10 +30,16 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 async function fetchSession(): Promise<AuthUser | null> {
   const base = getApiBaseUrl()
-  const res = await fetch(`${base}/api/auth/session`, {
+  let res = await fetch(`${base}/api/auth/session`, {
     credentials: 'include',
     cache: 'no-store',
   })
+  if (res.status === 401 && (await tryRefreshSession())) {
+    res = await fetch(`${base}/api/auth/session`, {
+      credentials: 'include',
+      cache: 'no-store',
+    })
+  }
   if (!res.ok) return null
   const json = (await res.json().catch(() => ({}))) as {
     success?: boolean

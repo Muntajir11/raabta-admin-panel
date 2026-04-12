@@ -7,7 +7,6 @@ import {
   Palette,
   Percent,
   ReceiptText,
-  Shield,
   Users,
   Wrench,
 } from 'lucide-react'
@@ -33,9 +32,4 @@ export const secondaryNav: NavItem[] = [
   { to: '/support', label: 'Support & returns', icon: Wrench },
   { to: '/settings', label: 'Settings', icon: Cog },
 ]
-
-export const roleNavNote = {
-  label: 'Roles (static)',
-  icon: Shield,
-}
 

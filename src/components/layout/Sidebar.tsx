@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { primaryNav, roleNavNote, secondaryNav } from './nav'
+import { primaryNav, secondaryNav } from './nav'
 import type React from 'react'
 
 function SidebarLink({
@@ -48,17 +48,6 @@ export function Sidebar() {
         {primaryNav.map((i) => (
           <SidebarLink key={i.to} to={i.to} label={i.label} Icon={i.icon} />
         ))}
-      </div>
-
-      <div className="mt-6 border-t border-slate-200 pt-4">
-        <div className="mb-2 flex items-center gap-2 px-2 text-xs font-semibold text-slate-700">
-          <roleNavNote.icon className="h-4 w-4 text-slate-500" />
-          {roleNavNote.label}
-        </div>
-        <div className="rounded-lg bg-white/70 p-3 text-xs text-slate-600 ring-1 ring-slate-200">
-          This admin is static for now. Later we can wire permissions (Owner,
-          Support, Production, Fulfillment).
-        </div>
       </div>
 
       <div className="mt-6 space-y-1">

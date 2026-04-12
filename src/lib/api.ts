@@ -18,19 +18,59 @@ async function parseJson(res: Response): Promise<unknown> {
   return res.json().catch(() => ({}))
 }
 
-/** Expects `{ success: true, data: T }` from API. */
+/** Uses refresh cookie to obtain new access + refresh cookies (same-origin / CSRF rules apply). */
+export async function tryRefreshSession(): Promise<boolean> {
+  const base = getApiBaseUrl()
+  const res = await fetch(`${base}/api/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  return res.ok
+}
+
+function cloneFormData(fd: FormData): FormData {
+  const next = new FormData()
+  fd.forEach((value, key) => {
+    next.append(key, value)
+  })
+  return next
+}
+
+/** Expects `{ success: true, data: T }` from API. On 401, refreshes session once and retries. */
 export async function apiRequest<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const base = getApiBaseUrl()
-  const isForm = opts.body instanceof FormData
-  const hasJsonBody = !isForm && opts.body != null && opts.body !== ''
-  const res = await fetch(`${base}${path}`, {
-    credentials: 'include',
-    ...opts,
-    headers: {
-      ...(hasJsonBody ? { 'Content-Type': 'application/json' } : {}),
-      ...(opts.headers || {}),
-    },
-  })
+  const { body: rawBody, headers: reqHeaders, ...rest } = opts
+
+  const isForm = rawBody instanceof FormData
+  let bodyFirst: BodyInit | undefined =
+    rawBody === null || rawBody === undefined ? undefined : (rawBody as BodyInit)
+  let bodyRetry: BodyInit | undefined
+  if (rawBody instanceof FormData) {
+    bodyFirst = cloneFormData(rawBody)
+    bodyRetry = cloneFormData(rawBody)
+  }
+
+  const doFetch = (body: BodyInit | undefined) => {
+    const isF = body instanceof FormData
+    const hasJsonBody = !isF && body != null && body !== ''
+    return fetch(`${base}${path}`, {
+      credentials: 'include',
+      ...rest,
+      body,
+      headers: {
+        ...(hasJsonBody ? { 'Content-Type': 'application/json' } : {}),
+        ...(reqHeaders || {}),
+      },
+    })
+  }
+
+  let res = await doFetch(bodyFirst)
+  if (res.status === 401 && (await tryRefreshSession())) {
+    res = await doFetch(isForm ? bodyRetry : bodyFirst)
+  }
+
   const data = (await parseJson(res)) as { success?: boolean; data?: T } & ApiErr
   if (!res.ok) {
     throw new Error(data.message || res.statusText || 'Request failed')

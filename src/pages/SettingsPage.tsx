@@ -89,18 +89,9 @@ export function SettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Team & roles</CardTitle>
+            <CardTitle>Team</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              Roles are placeholders:
-              <ul className="mt-2 list-disc pl-5 text-xs text-slate-600">
-                <li>Owner: everything</li>
-                <li>Support: tickets, returns</li>
-                <li>Production: designs queue, print status</li>
-                <li>Fulfillment: packing, shipped/delivered</li>
-              </ul>
-            </div>
             <Button
               variant="secondary"
               onClick={() => notify.error('Invite teammate (static): disabled')}
