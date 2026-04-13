@@ -28,18 +28,37 @@ export type AdminProductRow = {
   sizes: string[]
   colors: string[]
   gsmOptions: Array<{ gsm: number; price: number; isActive?: boolean }>
+  inventory?: Array<{ size: string; color: string; gsm: number; qty: number }>
   isActive: boolean
   createdAt?: string
   updatedAt?: string
 }
 
-const defaultSizes = 'XS,S,M,L,XL,XXL,XXXL'
-const defaultColors = 'Black,White'
+const SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'] as const
+const COLOR_OPTIONS = [
+  'Black',
+  'White',
+  'Lavender',
+  'Beige',
+  'Red',
+  'Sage Green',
+  'Brown',
+  'Offwhite',
+  'Off-white',
+  'Orange',
+  'Navy',
+  'Maroon',
+  'Charcoal',
+  'Army Green',
+  'Powder Blue',
+  'Green',
+] as const
 
 const GSM_VALUES = [180, 210, 240] as const
 type GsmChoice = (typeof GSM_VALUES)[number]
 
 type GsmTierFormRow = { gsm: GsmChoice; price: string; isActive: boolean }
+type InventoryRow = { size: string; color: string; gsm: GsmChoice; qty: string }
 
 function defaultGsmRow(gsm: GsmChoice = 180): GsmTierFormRow {
   return { gsm, price: '', isActive: true }
@@ -87,9 +106,8 @@ type ProductFormState = {
   rating: string | number | ''
   featuresText: string
   basePrice: string | number | ''
-  sizes: string
-  colors: string
   gsmRows: GsmTierFormRow[]
+  inventoryRows: InventoryRow[]
   imageUrl: string
   isActive: boolean
 }
@@ -104,12 +122,19 @@ function emptyForm(): ProductFormState {
     rating: '' as string | number | '',
     featuresText: '',
     basePrice: '' as string | number | '',
-    sizes: defaultSizes,
-    colors: defaultColors,
     gsmRows: [],
+    inventoryRows: [],
     imageUrl: '',
     isActive: true,
   }
+}
+
+function normalizeSize(v: string): string {
+  return String(v || '').trim().toUpperCase()
+}
+
+function normalizeColor(v: string): string {
+  return String(v || '').trim()
 }
 
 function StoreStatusControl({
@@ -162,10 +187,34 @@ export function ProductsPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<ProductFormState>(emptyForm())
   const [file, setFile] = useState<File | null>(null)
+  const [imageError, setImageError] = useState<string | null>(null)
+  const [invDraft, setInvDraft] = useState<InventoryRow>({
+    size: 'M',
+    color: 'Black',
+    gsm: 180,
+    qty: '0',
+  })
   const [saving, setSaving] = useState(false)
   const [activeSavingId, setActiveSavingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [productToDelete, setProductToDelete] = useState<AdminProductRow | null>(null)
+
+  function friendlyImageUploadError(err: unknown): string | null {
+    const msg = err instanceof Error ? err.message : ''
+    if (!msg) return null
+
+    // Multer upload size limit messages vary; cover common ones.
+    if (/file too large/i.test(msg) || /too large/i.test(msg) || /LIMIT_FILE_SIZE/.test(msg)) {
+      return 'Image is too large. Max allowed size is 1MB.'
+    }
+    if (/at least\s*640[×x]800/i.test(msg)) {
+      return 'Image is too small. Minimum dimensions are 640×800.'
+    }
+    if (/only jpeg|png|webp|gif/i.test(msg)) {
+      return 'Invalid image type. Use JPEG, PNG, WebP, or GIF.'
+    }
+    return null
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -198,6 +247,13 @@ export function ProductsPage() {
     setEditId(null)
     setForm(emptyForm())
     setFile(null)
+    setImageError(null)
+    setInvDraft({
+      size: 'M',
+      color: 'Black',
+      gsm: 180,
+      qty: '0',
+    })
     setModalOpen(true)
   }
 
@@ -215,13 +271,24 @@ export function ProductsPage() {
         rating: row.rating ?? '',
         featuresText: (row.features || []).join('\n'),
         basePrice: row.basePrice,
-        sizes: (row.sizes || []).join(','),
-        colors: (row.colors || []).join(','),
         gsmRows: gsmOptionsToRows(row.gsmOptions || []),
+        inventoryRows: (row.inventory || []).map((r) => ({
+          size: normalizeSize(r.size ?? ''),
+          color: normalizeColor(r.color ?? ''),
+          gsm: (r.gsm === 210 || r.gsm === 240 ? r.gsm : 180) as GsmChoice,
+          qty: String(r.qty ?? '0'),
+        })),
         imageUrl: row.image?.startsWith('http') ? row.image : resolveMediaUrl(row.image),
         isActive: row.isActive,
       })
       setFile(null)
+      setImageError(null)
+      setInvDraft({
+        size: 'M',
+        color: 'Black',
+        gsm: 180,
+        qty: '0',
+      })
       setModalOpen(true)
     } catch (e) {
       notify.error(e instanceof Error ? e.message : 'Failed to load product')
@@ -231,6 +298,7 @@ export function ProductsPage() {
   async function submitForm(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
+    setImageError(null)
     try {
       const basePrice = Number(form.basePrice)
       if (!Number.isFinite(basePrice) || basePrice < 0) {
@@ -244,6 +312,15 @@ export function ProductsPage() {
       }
       const gsmPayload = rowsToGsmPayload(form.gsmRows)
       const gsmOptionsJson = gsmPayload ? JSON.stringify(gsmPayload) : ''
+      const inventoryPayload = form.inventoryRows
+        .map((r) => ({
+          size: r.size.trim().toUpperCase(),
+          color: r.color.trim(),
+          gsm: r.gsm,
+          qty: Number(r.qty),
+        }))
+        .filter((r) => r.size && r.color && Number.isFinite(r.qty) && r.qty >= 0)
+      const inventoryJson = inventoryPayload.length ? JSON.stringify(inventoryPayload) : ''
 
       if (editId) {
         const body: Record<string, unknown> = {
@@ -252,8 +329,6 @@ export function ProductsPage() {
           description: form.description,
           brand: form.brand.trim(),
           basePrice,
-          sizes: form.sizes.split(',').map((s) => s.trim()).filter(Boolean),
-          colors: form.colors.split(',').map((s) => s.trim()).filter(Boolean),
           isActive: form.isActive,
         }
         if (form.rating !== '' && form.rating != null) {
@@ -275,16 +350,15 @@ export function ProductsPage() {
           fd.append('basePrice', String(basePrice))
           if (form.rating !== '' && form.rating != null) fd.append('rating', String(form.rating))
           fd.append('features', form.featuresText)
-          fd.append('sizes', form.sizes)
-          fd.append('colors', form.colors)
           if (gsmOptionsJson) fd.append('gsmOptionsJson', gsmOptionsJson)
+          if (inventoryJson) fd.append('inventoryJson', inventoryJson)
           fd.append('isActive', form.isActive ? 'true' : 'false')
           fd.append('image', file)
           await apiRequest(`/api/admin/products/${encodeURIComponent(editId)}`, { method: 'PATCH', body: fd })
         } else {
           await apiRequest(`/api/admin/products/${encodeURIComponent(editId)}`, {
             method: 'PATCH',
-            body: JSON.stringify(body),
+            body: JSON.stringify({ ...body, ...(inventoryPayload.length ? { inventory: inventoryPayload } : {}) }),
           })
         }
         notify.info('Product updated')
@@ -301,9 +375,8 @@ export function ProductsPage() {
         fd.append('brand', form.brand.trim())
         if (form.rating !== '' && form.rating != null) fd.append('rating', String(form.rating))
         fd.append('features', form.featuresText)
-        fd.append('sizes', form.sizes)
-        fd.append('colors', form.colors)
         if (gsmOptionsJson) fd.append('gsmOptionsJson', gsmOptionsJson)
+        if (inventoryJson) fd.append('inventoryJson', inventoryJson)
         fd.append('isActive', form.isActive ? 'true' : 'false')
         if (file) fd.append('image', file)
         if (form.imageUrl.trim()) fd.append('imageUrl', form.imageUrl.trim())
@@ -313,10 +386,43 @@ export function ProductsPage() {
       setModalOpen(false)
       await load()
     } catch (err) {
-      notify.error(err instanceof Error ? err.message : 'Save failed')
+      const friendly = friendlyImageUploadError(err)
+      if (friendly) {
+        setImageError(friendly)
+        notify.error(friendly)
+      } else {
+        notify.error(err instanceof Error ? err.message : 'Save failed')
+      }
     } finally {
       setSaving(false)
     }
+  }
+
+  function addInventoryRowFromDraft() {
+    const size = invDraft.size.trim().toUpperCase()
+    const color = invDraft.color.trim()
+    const gsm = invDraft.gsm
+    const qty = Number(invDraft.qty)
+    if (!size) return notify.error('Select a size')
+    if (!color) return notify.error('Select a color')
+    if (!Number.isFinite(qty) || qty < 0) return notify.error('Enter a valid qty (≥ 0)')
+
+    setForm((f) => {
+      const next = [...f.inventoryRows]
+      const idx = next.findIndex(
+        (r) =>
+          r.size.trim().toUpperCase() === size &&
+          r.color.trim().toLowerCase() === color.trim().toLowerCase() &&
+          r.gsm === gsm
+      )
+      if (idx >= 0) {
+        next[idx] = { ...next[idx], qty: String(qty) }
+      } else {
+        next.push({ size, color, gsm, qty: String(qty) })
+      }
+      return { ...f, inventoryRows: next }
+    })
+    notify.success('Variant added')
   }
 
   function openDeleteDialog(p: AdminProductRow) {
@@ -609,22 +715,133 @@ export function ProductsPage() {
                   onChange={(e) => setForm((f) => ({ ...f, featuresText: e.target.value }))}
                 />
               </label>
-              <label className="block text-xs font-medium text-slate-600">
-                Sizes (comma-separated)
-                <Input
-                  className="mt-1"
-                  value={form.sizes}
-                  onChange={(e) => setForm((f) => ({ ...f, sizes: e.target.value }))}
-                />
-              </label>
-              <label className="block text-xs font-medium text-slate-600">
-                Colors (comma-separated)
-                <Input
-                  className="mt-1"
-                  value={form.colors}
-                  onChange={(e) => setForm((f) => ({ ...f, colors: e.target.value }))}
-                />
-              </label>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-slate-600">Inventory (size · color · gsm · qty)</span>
+                  <Button type="button" variant="secondary" className="h-8 text-xs" onClick={addInventoryRowFromDraft}>
+                    Add
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <label className="text-[11px] font-medium text-slate-600">
+                    Size
+                    <select
+                      className="mt-1 flex h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                      value={invDraft.size}
+                      onChange={(e) => setInvDraft((d) => ({ ...d, size: e.target.value }))}
+                    >
+                      {SIZE_OPTIONS.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[11px] font-medium text-slate-600">
+                    Color
+                    <select
+                      className="mt-1 flex h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                      value={invDraft.color}
+                      onChange={(e) => setInvDraft((d) => ({ ...d, color: e.target.value }))}
+                    >
+                      {COLOR_OPTIONS.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[11px] font-medium text-slate-600">
+                    GSM
+                    <select
+                      className="mt-1 flex h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                      value={invDraft.gsm}
+                      onChange={(e) =>
+                        setInvDraft((d) => ({ ...d, gsm: Number(e.target.value) as GsmChoice }))
+                      }
+                    >
+                      {(form.gsmRows.length ? form.gsmRows.map((r) => r.gsm) : GSM_VALUES).map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[11px] font-medium text-slate-600">
+                    Qty
+                    <Input
+                      className="mt-1 h-9"
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={invDraft.qty}
+                      onChange={(e) => setInvDraft((d) => ({ ...d, qty: e.target.value }))}
+                    />
+                  </label>
+                </div>
+
+                {form.inventoryRows.length === 0 ? (
+                  <p className="mt-2 text-xs text-slate-500">No variants yet. Add one above. Qty 0 = out of stock.</p>
+                ) : (
+                  <div className="mt-3 max-h-52 overflow-auto rounded-md border border-slate-100">
+                    <table className="w-full text-left text-xs">
+                      <thead className="sticky top-0 bg-slate-50 text-slate-600">
+                        <tr>
+                          <th className="px-2 py-2">Variant</th>
+                          <th className="px-2 py-2">Qty</th>
+                          <th className="px-2 py-2 text-right">Remove</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {form.inventoryRows.map((r, idx) => (
+                          <tr key={`${r.size}-${r.color}-${r.gsm}-${idx}`}>
+                            <td className="px-2 py-2 text-slate-700">
+                              <span className="font-medium text-slate-900">{r.size}</span>
+                              <span className="text-slate-400"> · </span>
+                              {r.color}
+                              <span className="text-slate-400"> · </span>
+                              {r.gsm}gsm
+                            </td>
+                            <td className="px-2 py-2">
+                              <Input
+                                className="h-8"
+                                type="number"
+                                min={0}
+                                step="1"
+                                value={r.qty}
+                                onChange={(e) =>
+                                  setForm((f) => ({
+                                    ...f,
+                                    inventoryRows: f.inventoryRows.map((row, i) =>
+                                      i === idx ? { ...row, qty: e.target.value } : row
+                                    ),
+                                  }))
+                                }
+                              />
+                            </td>
+                            <td className="px-2 py-2 text-right">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                className="h-8 text-xs text-rose-600"
+                                onClick={() =>
+                                  setForm((f) => ({
+                                    ...f,
+                                    inventoryRows: f.inventoryRows.filter((_, i) => i !== idx),
+                                  }))
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-xs font-medium text-slate-600">GSM price tiers (optional)</span>
@@ -713,8 +930,16 @@ export function ProductsPage() {
                   className="mt-1"
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  onChange={(e) => {
+                    setFile(e.target.files?.[0] ?? null)
+                    setImageError(null)
+                  }}
                 />
+                {imageError ? (
+                  <div className="mt-1 text-xs font-medium text-rose-600">{imageError}</div>
+                ) : (
+                  <div className="mt-1 text-[11px] text-slate-500">Max 1MB. Minimum 640×800.</div>
+                )}
               </label>
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-slate-600">Visibility on storefront</span>
