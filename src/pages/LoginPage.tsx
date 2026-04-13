@@ -34,10 +34,12 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [apiDown, setApiDown] = useState(false)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
+    setApiDown(false)
     try {
       const base = getApiBaseUrl()
       const res = await fetch(`${base}/api/auth/login`, {
@@ -59,7 +61,8 @@ export function LoginPage() {
       notify.success('Signed in')
       navigate('/dashboard', { replace: true })
     } catch (err) {
-      notify.error(err instanceof Error ? err.message : 'Login failed')
+      setApiDown(true)
+      notify.error('Backend server is not reachable. Start the API and try again.')
     } finally {
       setLoading(false)
     }
@@ -75,6 +78,11 @@ export function LoginPage() {
           </p>
         </div>
         <form className="space-y-5" onSubmit={onSubmit}>
+          {apiDown ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Backend server is not reachable. Start the API and try again.
+            </div>
+          ) : null}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-600" htmlFor="email">
               Email

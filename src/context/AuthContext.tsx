@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -51,19 +50,21 @@ async function fetchSession(): Promise<AuthUser | null> {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthStatus>('loading')
+  const [status, setStatus] = useState<AuthStatus>('ready')
   const [user, setUser] = useState<AuthUser | null>(null)
 
   const refresh = useCallback(async (): Promise<AuthUser | null> => {
-    const u = await fetchSession()
-    setUser(u)
-    setStatus('ready')
-    return u
+    try {
+      const u = await fetchSession()
+      setUser(u)
+      setStatus('ready')
+      return u
+    } catch {
+      setUser(null)
+      setStatus('ready')
+      return null
+    }
   }, [])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
 
   const logout = useCallback(async () => {
     const base = getApiBaseUrl()

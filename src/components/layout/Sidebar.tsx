@@ -36,7 +36,7 @@ export function Sidebar() {
         <div className="min-w-0">
           <div className="text-sm font-semibold text-slate-900">Raabta Admin</div>
           <div className="truncate text-xs text-slate-600">
-            Custom T-shirt store (static)
+            Custom T-shirt store
           </div>
         </div>
         <div className="rounded-full bg-brand-600 px-2 py-1 text-[11px] font-semibold text-white">
