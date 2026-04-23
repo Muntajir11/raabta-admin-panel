@@ -935,11 +935,20 @@ export function ProductsPage() {
                     setImageError(null)
                   }}
                 />
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                  <span>Max 1MB. Minimum 640×800.</span>
+                  <a
+                    href="https://imageresizer.com/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-slate-700 underline underline-offset-2 hover:text-slate-900"
+                  >
+                    Resize image
+                  </a>
+                </div>
                 {imageError ? (
                   <div className="mt-1 text-xs font-medium text-rose-600">{imageError}</div>
-                ) : (
-                  <div className="mt-1 text-[11px] text-slate-500">Max 1MB. Minimum 640×800.</div>
-                )}
+                ) : null}
               </label>
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-slate-600">Visibility on storefront</span>

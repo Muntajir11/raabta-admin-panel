@@ -29,12 +29,12 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 async function fetchSession(): Promise<AuthUser | null> {
   const base = getApiBaseUrl()
-  let res = await fetch(`${base}/api/auth/session`, {
+  let res = await fetch(`${base}/api/admin/auth/session`, {
     credentials: 'include',
     cache: 'no-store',
   })
   if (res.status === 401 && (await tryRefreshSession())) {
-    res = await fetch(`${base}/api/auth/session`, {
+    res = await fetch(`${base}/api/admin/auth/session`, {
       credentials: 'include',
       cache: 'no-store',
     })
@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     const base = getApiBaseUrl()
     try {
-      await fetch(`${base}/api/auth/logout`, {
+      await fetch(`${base}/api/admin/auth/logout`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

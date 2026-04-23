@@ -8,7 +8,6 @@ import {
   Percent,
   ReceiptText,
   Users,
-  Wrench,
 } from 'lucide-react'
 
 export type NavItem = {
@@ -29,7 +28,6 @@ export const primaryNav: NavItem[] = [
 ]
 
 export const secondaryNav: NavItem[] = [
-  { to: '/support', label: 'Support & returns', icon: Wrench },
   { to: '/settings', label: 'Settings', icon: Cog },
 ]
 

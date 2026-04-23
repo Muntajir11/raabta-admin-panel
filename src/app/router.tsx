@@ -5,6 +5,7 @@ import { AdminLayout } from '../components/layout/AdminLayout'
 import { LoginPage } from '../pages/LoginPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { OrdersPage } from '../pages/OrdersPage'
+import { OrderDetailPage } from '../pages/OrderDetailPage'
 import { ProductsPage } from '../pages/ProductsPage'
 import { DesignsPage } from '../pages/DesignsPage'
 import { CustomerDetailPage } from '../pages/CustomerDetailPage'
@@ -13,7 +14,6 @@ import { InventoryPage } from '../pages/InventoryPage'
 import { CouponsPage } from '../pages/CouponsPage'
 import { AnalyticsPage } from '../pages/AnalyticsPage'
 import { SettingsPage } from '../pages/SettingsPage'
-import { SupportReturnsPage } from '../pages/SupportReturnsPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
 
 export const router = createBrowserRouter([
@@ -36,6 +36,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'orders', element: <OrdersPage /> },
+      { path: 'orders/:orderNumber', element: <OrderDetailPage /> },
       { path: 'products', element: <ProductsPage /> },
       { path: 'designs', element: <DesignsPage /> },
       { path: 'customers', element: <CustomersPage /> },
@@ -44,7 +45,6 @@ export const router = createBrowserRouter([
       { path: 'coupons', element: <CouponsPage /> },
       { path: 'analytics', element: <AnalyticsPage /> },
       { path: 'settings', element: <SettingsPage /> },
-      { path: 'support', element: <SupportReturnsPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

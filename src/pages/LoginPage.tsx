@@ -42,7 +42,7 @@ export function LoginPage() {
     setApiDown(false)
     try {
       const base = getApiBaseUrl()
-      const res = await fetch(`${base}/api/auth/login`, {
+      const res = await fetch(`${base}/api/admin/auth/login`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

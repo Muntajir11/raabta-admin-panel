@@ -1,6 +1,9 @@
 const defaultBase = 'http://localhost:5000'
 
 export function getApiBaseUrl(): string {
+  // In local dev, use same-origin `/api/...` so cookies are first-party
+  // and requests go through Vite's proxy (see `vite.config.ts`).
+  if (import.meta.env.DEV) return ''
   return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || defaultBase
 }
 
@@ -19,15 +22,22 @@ async function parseJson(res: Response): Promise<unknown> {
 }
 
 /** Uses refresh cookie to obtain new access + refresh cookies (same-origin / CSRF rules apply). */
+let inflightRefresh: Promise<boolean> | null = null
 export async function tryRefreshSession(): Promise<boolean> {
+  if (inflightRefresh) return inflightRefresh
   const base = getApiBaseUrl()
-  const res = await fetch(`${base}/api/auth/refresh`, {
+  inflightRefresh = fetch(`${base}/api/admin/auth/refresh`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: '{}',
   })
-  return res.ok
+    .then((res) => res.ok)
+    .catch(() => false)
+    .finally(() => {
+      inflightRefresh = null
+    })
+  return inflightRefresh
 }
 
 function cloneFormData(fd: FormData): FormData {
