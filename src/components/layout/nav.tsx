@@ -3,6 +3,7 @@ import {
   BarChart3,
   Boxes,
   Cog,
+  LifeBuoy,
   LayoutDashboard,
   Palette,
   Percent,
@@ -25,6 +26,7 @@ export const primaryNav: NavItem[] = [
   { to: '/inventory', label: 'Inventory', icon: Boxes },
   { to: '/coupons', label: 'Coupons', icon: Percent },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { to: '/support', label: 'Support', icon: LifeBuoy },
 ]
 
 export const secondaryNav: NavItem[] = [

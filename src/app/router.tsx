@@ -15,6 +15,7 @@ import { CouponsPage } from '../pages/CouponsPage'
 import { AnalyticsPage } from '../pages/AnalyticsPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
+import { SupportPage } from '../pages/SupportPage'
 
 export const router = createBrowserRouter([
   {
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
       { path: 'inventory', element: <InventoryPage /> },
       { path: 'coupons', element: <CouponsPage /> },
       { path: 'analytics', element: <AnalyticsPage /> },
+      { path: 'support', element: <SupportPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
