@@ -8,6 +8,7 @@ import { PageHeader } from '../components/ui/PageHeader'
 import { formatCurrencyRs, formatDateTime } from '../lib/format'
 import { notify } from '../lib/notify'
 import { apiRequest } from '../lib/api'
+import { formatApiError } from '../lib/errors'
 
 type OrderStatus =
   | 'pending'
@@ -65,7 +66,7 @@ export function OrdersPage() {
       )
       setRows(data.items)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load orders')
+      notify.error(formatApiError(e, 'Failed to load orders'))
       setRows([])
     } finally {
       setLoading(false)
@@ -164,7 +165,7 @@ export function OrdersPage() {
                   onClick={() => navigate(`/orders/${encodeURIComponent(o.orderNumber)}`)}
                 >
                   <td className="px-3 py-3">
-                    <div className="font-medium text-slate-900">{o.id}</div>
+                    <div className="font-medium text-slate-900">{o.orderNumber}</div>
                     <div className="text-xs text-slate-500">{formatDateTime(o.createdAt)}</div>
                   </td>
                   <td className="px-3 py-3">

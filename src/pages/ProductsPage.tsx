@@ -8,6 +8,7 @@ import { cn } from '../components/ui/cn'
 import { formatCurrencyRs } from '../lib/format'
 import { notify } from '../lib/notify'
 import { apiRequest, getApiBaseUrl, resolveMediaUrl } from '../lib/api'
+import { formatApiError } from '../lib/errors'
 import {
   PRODUCT_SECTIONS,
   type ProductSection,
@@ -198,6 +199,7 @@ export function ProductsPage() {
   const [activeSavingId, setActiveSavingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [productToDelete, setProductToDelete] = useState<AdminProductRow | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
 
   function friendlyImageUploadError(err: unknown): string | null {
     const msg = err instanceof Error ? err.message : ''
@@ -228,7 +230,7 @@ export function ProductsPage() {
       )
       setRows(data.items)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load products')
+      notify.error(formatApiError(e, 'Failed to load products'))
       setRows([])
     } finally {
       setLoading(false)
@@ -291,7 +293,7 @@ export function ProductsPage() {
       })
       setModalOpen(true)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load product')
+      notify.error(formatApiError(e, 'Failed to load product'))
     }
   }
 
@@ -391,7 +393,7 @@ export function ProductsPage() {
         setImageError(friendly)
         notify.error(friendly)
       } else {
-        notify.error(err instanceof Error ? err.message : 'Save failed')
+        notify.error(formatApiError(err, 'Save failed'))
       }
     } finally {
       setSaving(false)
@@ -427,6 +429,7 @@ export function ProductsPage() {
 
   function openDeleteDialog(p: AdminProductRow) {
     setProductToDelete(p)
+    setDeleteConfirm('')
   }
 
   async function confirmDeleteProduct() {
@@ -439,7 +442,7 @@ export function ProductsPage() {
       setProductToDelete(null)
       await load()
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Could not delete product')
+      notify.error(formatApiError(e, 'Could not delete product'))
     } finally {
       setDeletingId(null)
     }
@@ -456,7 +459,7 @@ export function ProductsPage() {
       notify.info(next ? 'Product is live on the store' : 'Product hidden from the store')
       await load()
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Could not update visibility')
+      notify.error(formatApiError(e, 'Could not update visibility'))
     } finally {
       setActiveSavingId(null)
     }
@@ -989,6 +992,18 @@ export function ProductsPage() {
               Product Code - {productToDelete.productId}
             </p>
             <p className="mt-2 text-sm text-slate-500">This cannot be undone.</p>
+            <div className="mt-4">
+              <label className="text-xs font-medium text-slate-600">
+                Type <span className="font-semibold text-slate-900">{productToDelete.productId}</span> to confirm
+                <input
+                  className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-brand-500"
+                  value={deleteConfirm}
+                  onChange={(e) => setDeleteConfirm(e.target.value)}
+                  disabled={Boolean(deletingId)}
+                  placeholder={productToDelete.productId}
+                />
+              </label>
+            </div>
             <div className="mt-6 flex justify-end gap-2">
               <Button
                 type="button"
@@ -1001,7 +1016,7 @@ export function ProductsPage() {
               <Button
                 type="button"
                 variant="danger"
-                disabled={deletingId === productToDelete.productId}
+                disabled={deletingId === productToDelete.productId || deleteConfirm.trim() !== productToDelete.productId}
                 onClick={() => void confirmDeleteProduct()}
               >
                 {deletingId === productToDelete.productId ? 'Deleting…' : 'Delete'}

@@ -4,8 +4,9 @@ import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Card } from '../components/ui/Card'
 import { useAuth } from '../context/AuthContext'
-import { getApiBaseUrl } from '../lib/api'
+import { apiRequest } from '../lib/api'
 import { notify } from '../lib/notify'
+import { formatApiError, isNetworkError } from '../lib/errors'
 
 function RaabtaWordmark() {
   return (
@@ -41,18 +42,10 @@ export function LoginPage() {
     setLoading(true)
     setApiDown(false)
     try {
-      const base = getApiBaseUrl()
-      const res = await fetch(`${base}/api/admin/auth/login`, {
+      await apiRequest('/api/admin/auth/login', {
         method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), password }),
       })
-      const data = (await res.json().catch(() => ({}))) as { message?: string; success?: boolean }
-      if (!res.ok) {
-        notify.error(data.message || 'Login failed')
-        return
-      }
       const u = await refresh()
       if (u?.role !== 'admin') {
         notify.error('This account is not an admin. Set role to admin in the database.')
@@ -61,8 +54,8 @@ export function LoginPage() {
       notify.success('Signed in')
       navigate('/dashboard', { replace: true })
     } catch (err) {
-      setApiDown(true)
-      notify.error('Backend server is not reachable. Start the API and try again.')
+      if (isNetworkError(err)) setApiDown(true)
+      notify.error(formatApiError(err, 'Login failed'))
     } finally {
       setLoading(false)
     }

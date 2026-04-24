@@ -9,6 +9,7 @@ import { formatCurrencyRs, formatDateTime } from '../lib/format'
 import { nil } from '../lib/nil'
 import { notify } from '../lib/notify'
 import { apiRequest } from '../lib/api'
+import { formatApiError } from '../lib/errors'
 
 type CustomerUser = {
   id: string
@@ -38,24 +39,31 @@ export function CustomerDetailPage() {
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<CustomerUser | null>(null)
   const [orders, setOrders] = useState<OrderRow[]>([])
+  const [page, setPage] = useState(1)
+  const [limit] = useState(50)
+  const [total, setTotal] = useState(0)
 
   const load = useCallback(async () => {
     if (!userId) return
     setLoading(true)
     try {
-      const data = await apiRequest<{ user: CustomerUser; orders: OrderRow[] }>(
-        `/api/admin/customers/${encodeURIComponent(userId)}`
-      )
+      const qp = new URLSearchParams({ page: String(page), limit: String(limit) })
+      const data = await apiRequest<{
+        user: CustomerUser
+        orders: { items: OrderRow[]; page: number; limit: number; total: number }
+      }>(`/api/admin/customers/${encodeURIComponent(userId)}?${qp.toString()}`)
       setUser(data.user)
-      setOrders(data.orders)
+      setOrders(data.orders.items)
+      setTotal(data.orders.total)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load customer')
+      notify.error(formatApiError(e, 'Failed to load customer'))
       setUser(null)
       setOrders([])
+      setTotal(0)
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [limit, page, userId])
 
   useEffect(() => {
     void load()
@@ -161,6 +169,27 @@ export function CustomerDetailPage() {
               </table>
             </div>
           )}
+
+          {total > limit ? (
+            <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+              <div className="text-slate-600">
+                Page <span className="font-semibold text-slate-900">{page}</span> of{' '}
+                <span className="font-semibold text-slate-900">{Math.max(1, Math.ceil(total / limit))}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+                  Prev
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page >= Math.ceil(total / limit)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </Card>
       </div>
     </div>

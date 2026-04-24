@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { apiRequest } from '../lib/api'
 import { notify } from '../lib/notify'
+import { formatApiError } from '../lib/errors'
 
 type DashboardData = {
   revenueTotal: number
@@ -72,7 +73,7 @@ export function DashboardPage() {
         if (cancelled) return
         setData(res)
       } catch (e) {
-        if (!cancelled) notify.error(e instanceof Error ? e.message : 'Failed to load dashboard')
+        if (!cancelled) notify.error(formatApiError(e, 'Failed to load dashboard'))
         if (!cancelled) setData(null)
       } finally {
         if (!cancelled) setLoading(false)

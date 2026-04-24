@@ -1,7 +1,6 @@
-import { Bell, LogOut, Search } from 'lucide-react'
+import { Bell, LogOut } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { Input } from '../ui/Input'
 
 const titles: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -40,14 +39,6 @@ export function Topbar() {
         </div>
 
         <div className="flex flex-1 items-center justify-end gap-3">
-          <div className="hidden w-full max-w-md sm:block">
-            <Input
-              leftIcon={<Search className="h-4 w-4 text-slate-500" />}
-              placeholder="Search orders, products, customers…"
-              aria-label="Global search (static)"
-            />
-          </div>
-
           <button
             type="button"
             className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"

@@ -7,6 +7,7 @@ import { PageHeader } from '../components/ui/PageHeader'
 import { formatDateTime } from '../lib/format'
 import { notify } from '../lib/notify'
 import { apiRequest } from '../lib/api'
+import { formatApiError } from '../lib/errors'
 
 type TicketStatus = 'open' | 'resolved'
 
@@ -61,7 +62,7 @@ export function SupportPage() {
       const data = await apiRequest<{ items: TicketRow[] }>(`/api/admin/support/tickets${qs ? `?${qs}` : ''}`)
       setRows(data.items)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load support tickets')
+      notify.error(formatApiError(e, 'Failed to load support tickets'))
       setRows([])
     } finally {
       setLoading(false)
@@ -73,7 +74,7 @@ export function SupportPage() {
       const data = await apiRequest<{ ticket: TicketDetail }>(`/api/admin/support/tickets/${ticketId}`)
       setActive(data.ticket)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load ticket')
+      notify.error(formatApiError(e, 'Failed to load ticket'))
       setActive(null)
     }
   }, [])
@@ -104,7 +105,7 @@ export function SupportPage() {
       setActive((prev) => (prev ? { ...prev, ...updated, status: updated.status } : prev))
       notify.success(nextStatus === 'resolved' ? 'Marked as resolved' : 'Reopened')
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to update ticket')
+      notify.error(formatApiError(e, 'Failed to update ticket'))
     } finally {
       setUpdating(false)
     }

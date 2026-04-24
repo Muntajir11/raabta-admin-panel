@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -7,6 +7,7 @@ import { PageHeader } from '../components/ui/PageHeader'
 import { formatDateTime } from '../lib/format'
 import { notify } from '../lib/notify'
 import { apiRequest } from '../lib/api'
+import { formatApiError } from '../lib/errors'
 
 type InventoryVariantRow = {
   sku: string
@@ -45,6 +46,9 @@ export function InventoryPage() {
   const [rows, setRows] = useState<InventoryProductRow[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [page, setPage] = useState(1)
+  const [limit] = useState(30)
+  const [total, setTotal] = useState(0)
 
   const [adjustOpen, setAdjustOpen] = useState(false)
   const [adjusting, setAdjusting] = useState(false)
@@ -59,39 +63,43 @@ export function InventoryPage() {
     Array<{ id: string; createdAt: string; delta: number; reason: string; note: string }>
   >([])
 
-  const fetchList = useCallback(async (search: string, low: boolean) => {
+  const fetchList = useCallback(async (search: string, low: boolean, pg: number) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
       if (search.trim()) params.set('q', search.trim())
       if (low) params.set('lowOnly', 'true')
+      params.set('page', String(pg))
+      params.set('limit', String(limit))
       const qs = params.toString()
-      const data = await apiRequest<{ items: InventoryProductRow[] }>(
+      const data = await apiRequest<{ items: InventoryProductRow[]; page: number; limit: number; total: number }>(
         `/api/admin/inventory/products${qs ? `?${qs}` : ''}`
       )
       setRows(data.items)
+      setTotal(data.total || 0)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load inventory')
+      notify.error(formatApiError(e, 'Failed to load inventory'))
       setRows([])
+      setTotal(0)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [limit])
 
   useEffect(() => {
-    void fetchList('', false)
+    void fetchList('', false, 1)
   }, [fetchList])
 
   const visibleRows = useMemo(() => rows, [rows])
 
   useEffect(() => {
-    void fetchList(q, lowOnly)
-  }, [fetchList, lowOnly])
+    void fetchList(q, lowOnly, page)
+  }, [fetchList, lowOnly, page, q])
 
   useEffect(() => {
     if (q.trim() !== '') return
-    void fetchList('', lowOnly)
-  }, [fetchList, lowOnly, q])
+    void fetchList('', lowOnly, page)
+  }, [fetchList, lowOnly, page, q])
 
   const openAdjust = (v: InventoryVariantRow) => {
     setAdjustTarget(v)
@@ -123,9 +131,9 @@ export function InventoryPage() {
       })
       notify.success('Stock updated')
       setAdjustOpen(false)
-      await fetchList(q, lowOnly)
+      await fetchList(q, lowOnly, page)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Adjust failed')
+      notify.error(formatApiError(e, 'Adjust failed'))
     } finally {
       setAdjusting(false)
     }
@@ -148,7 +156,7 @@ export function InventoryPage() {
       )
       setHistoryItems(data.items)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load history')
+      notify.error(formatApiError(e, 'Failed to load history'))
       setHistoryOpen(false)
     } finally {
       setHistoryLoading(false)
@@ -186,7 +194,9 @@ export function InventoryPage() {
                     </div>
                     <div className="mt-2 text-xs text-slate-600">
                       Before: <span className="font-medium">{adjustTarget.onHand}</span> → After:{' '}
-                      <span className="font-medium">{Math.max(0, adjustTarget.onHand + delta)}</span>
+                      <span className="font-medium">
+                        {Number.isFinite(delta) ? Math.max(0, adjustTarget.onHand + delta) : adjustTarget.onHand}
+                      </span>
                     </div>
                   </div>
 
@@ -305,7 +315,7 @@ export function InventoryPage() {
           <Button variant="ghost" onClick={() => setQ('')} disabled={loading}>
             Clear
           </Button>
-          <Button variant="secondary" onClick={() => void fetchList(q, lowOnly)} disabled={loading}>
+          <Button variant="secondary" onClick={() => void fetchList(q, lowOnly, 1)} disabled={loading}>
             Search
           </Button>
           {lowOnly ? (
@@ -336,8 +346,8 @@ export function InventoryPage() {
               ) : visibleRows.map((p) => {
                 const isOpen = Boolean(expanded[p.productId])
                 return (
-                  <>
-                    <tr key={p.productId} className="hover:bg-slate-50/60">
+                  <Fragment key={p.productId}>
+                    <tr className="hover:bg-slate-50/60">
                       <td className="px-3 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -437,7 +447,7 @@ export function InventoryPage() {
                         </td>
                       </tr>
                     ) : null}
-                  </>
+                  </Fragment>
                 )
               })}
               {!loading && visibleRows.length === 0 ? (
@@ -451,6 +461,31 @@ export function InventoryPage() {
           </table>
         </div>
       </Card>
+
+      {total > limit ? (
+        <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+          <div className="text-slate-600">
+            Page <span className="font-semibold text-slate-900">{page}</span> of{' '}
+            <span className="font-semibold text-slate-900">{Math.max(1, Math.ceil(total / limit))}</span>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+            >
+              Prev
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= Math.ceil(total / limit) || loading}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

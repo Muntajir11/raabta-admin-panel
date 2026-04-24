@@ -6,7 +6,6 @@ import {
   LifeBuoy,
   LayoutDashboard,
   Palette,
-  Percent,
   ReceiptText,
   Users,
 } from 'lucide-react'
@@ -24,7 +23,6 @@ export const primaryNav: NavItem[] = [
   { to: '/designs', label: 'Custom designs', icon: Palette },
   { to: '/customers', label: 'Customers', icon: Users },
   { to: '/inventory', label: 'Inventory', icon: Boxes },
-  { to: '/coupons', label: 'Coupons', icon: Percent },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/support', label: 'Support', icon: LifeBuoy },
 ]

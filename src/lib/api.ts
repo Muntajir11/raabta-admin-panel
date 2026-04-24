@@ -58,6 +58,7 @@ export async function apiRequest<T>(path: string, opts: RequestInit = {}): Promi
     rawBody === null || rawBody === undefined ? undefined : (rawBody as BodyInit)
   let bodyRetry: BodyInit | undefined
   if (rawBody instanceof FormData) {
+    // Always clone FormData; some environments treat request bodies as consumable streams.
     bodyFirst = cloneFormData(rawBody)
     bodyRetry = cloneFormData(rawBody)
   }

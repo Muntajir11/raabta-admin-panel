@@ -8,6 +8,7 @@ import { formatCurrencyRs, formatDateTime } from '../lib/format'
 import { nil } from '../lib/nil'
 import { notify } from '../lib/notify'
 import { apiRequest } from '../lib/api'
+import { formatApiError } from '../lib/errors'
 
 export type CustomerListRow = {
   id: string
@@ -39,7 +40,7 @@ export function CustomersPage() {
       )
       setRows(data.items)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load customers')
+      notify.error(formatApiError(e, 'Failed to load customers'))
       setRows([])
     } finally {
       setLoading(false)

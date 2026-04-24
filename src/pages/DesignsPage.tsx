@@ -7,6 +7,7 @@ import { PageHeader } from '../components/ui/PageHeader'
 import { formatCurrencyRs, formatDateTime } from '../lib/format'
 import { notify } from '../lib/notify'
 import { apiRequest } from '../lib/api'
+import { formatApiError } from '../lib/errors'
 
 type DesignStatus = 'new' | 'reviewed' | 'approved' | 'rejected' | 'printed' | 'all'
 
@@ -59,6 +60,8 @@ export function DesignsPage() {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [preview, setPreview] = useState<DesignDetail | null>(null)
+  const [approveConfirmId, setApproveConfirmId] = useState<string | null>(null)
+  const [approvingId, setApprovingId] = useState<string | null>(null)
 
   const fetchList = useCallback(async () => {
     setLoading(true)
@@ -72,7 +75,7 @@ export function DesignsPage() {
       )
       setRows(data.items)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load designs')
+      notify.error(formatApiError(e, 'Failed to load designs'))
       setRows([])
     } finally {
       setLoading(false)
@@ -91,7 +94,7 @@ export function DesignsPage() {
       const data = await apiRequest<DesignDetail>(`/api/admin/designs/${encodeURIComponent(designId)}`)
       setPreview(data)
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load preview')
+      notify.error(formatApiError(e, 'Failed to load preview'))
       setPreviewOpen(false)
     } finally {
       setPreviewLoading(false)
@@ -100,6 +103,7 @@ export function DesignsPage() {
 
   const approve = useCallback(
     async (designId: string) => {
+      setApprovingId(designId)
       try {
         await apiRequest(`/api/admin/designs/${encodeURIComponent(designId)}`, {
           method: 'PATCH',
@@ -109,7 +113,9 @@ export function DesignsPage() {
         await fetchList()
         setPreview((p) => (p && p.designId === designId ? { ...p, status: 'approved' } : p))
       } catch (e) {
-        notify.error(e instanceof Error ? e.message : 'Approve failed')
+        notify.error(formatApiError(e, 'Approve failed'))
+      } finally {
+        setApprovingId((cur) => (cur === designId ? null : cur))
       }
     },
     [fetchList]
@@ -157,10 +163,10 @@ export function DesignsPage() {
                       <Badge tone={toneByStatus[preview.status]}>{preview.status}</Badge>
                       <Button
                         size="sm"
-                        onClick={() => void approve(preview.designId)}
-                        disabled={preview.status === 'approved' || preview.status === 'printed'}
+                        onClick={() => setApproveConfirmId(preview.designId)}
+                        disabled={preview.status === 'approved' || preview.status === 'printed' || approvingId === preview.designId}
                       >
-                        Approve
+                        {approvingId === preview.designId ? 'Approving…' : 'Approve'}
                       </Button>
                     </div>
                   </div>
@@ -185,6 +191,39 @@ export function DesignsPage() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {approveConfirmId ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <div className="text-sm font-semibold text-slate-900">Confirm approval</div>
+              <Button variant="ghost" size="sm" onClick={() => setApproveConfirmId(null)}>
+                Close
+              </Button>
+            </div>
+            <div className="p-4">
+              <div className="text-sm text-slate-700">
+                Approve design <span className="font-semibold text-slate-900">{approveConfirmId}</span> for printing?
+              </div>
+              <div className="mt-2 text-xs text-slate-600">This action is intended to be final.</div>
+              <div className="mt-4 flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => setApproveConfirmId(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    const id = approveConfirmId
+                    setApproveConfirmId(null)
+                    void approve(id)
+                  }}
+                >
+                  Confirm approve
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -270,10 +309,10 @@ export function DesignsPage() {
                         </Button>
                         <Button
                           size="sm"
-                          onClick={() => void approve(d.designId)}
-                          disabled={d.status === 'approved' || d.status === 'printed'}
+                          onClick={() => setApproveConfirmId(d.designId)}
+                          disabled={d.status === 'approved' || d.status === 'printed' || approvingId === d.designId}
                         >
-                          Approve
+                          {approvingId === d.designId ? 'Approving…' : 'Approve'}
                         </Button>
                       </div>
                     </td>

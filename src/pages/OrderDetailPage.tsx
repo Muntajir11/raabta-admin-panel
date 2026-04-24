@@ -7,6 +7,7 @@ import { PageHeader } from '../components/ui/PageHeader'
 import { formatCurrencyRs, formatDateTime } from '../lib/format'
 import { notify } from '../lib/notify'
 import { apiRequest } from '../lib/api'
+import { formatApiError } from '../lib/errors'
 
 type OrderStatus =
   | 'pending'
@@ -91,7 +92,7 @@ export function OrderDetailPage() {
       setPaymentStatus(data.paymentStatus)
       setNotes(data.notes || '')
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to load order')
+      notify.error(formatApiError(e, 'Failed to load order'))
       setOrder(null)
     } finally {
       setLoading(false)
@@ -125,7 +126,7 @@ export function OrderDetailPage() {
       setNotes(updated.notes || '')
       notify.success('Order updated')
     } catch (e) {
-      notify.error(e instanceof Error ? e.message : 'Failed to update order')
+      notify.error(formatApiError(e, 'Failed to update order'))
     } finally {
       setSaving(false)
     }

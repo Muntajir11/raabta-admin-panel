@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from 'react'
 import { getApiBaseUrl, tryRefreshSession } from '../lib/api'
+import { notify } from '../lib/notify'
+import { formatApiError, isNetworkError } from '../lib/errors'
 
 export type AuthUser = {
   id: string
@@ -75,6 +77,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       })
+    } catch (err) {
+      if (isNetworkError(err)) {
+        notify.info('Signed out locally (backend unreachable)')
+      } else {
+        notify.error(formatApiError(err, 'Logout failed'))
+      }
     } finally {
       setUser(null)
       setStatus('ready')
